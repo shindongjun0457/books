@@ -1,0 +1,23 @@
+{
+  "name": "books",
+  "version": "1.0.0",
+  "description": "",
+  "main": "config.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shindongjun0457/books.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/shindongjun0457/books/issues"
+  },
+  "homepage": "https://github.com/shindongjun0457/books#readme",
+  "dependencies": {
+    "pdfjs-dist": "^4.10.38"
+  }
+}

@@ -28,10 +28,13 @@ const id = p.get('id');
 const name = p.get('name') || 'PDF 문서';
 
 document.getElementById('title').textContent = name;
+
+// Drive media endpoint (CORS 허용)
 const fileUrl = `https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${API_KEY}`;
 document.getElementById('download').href = fileUrl;
 
-const viewer = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(fileUrl)}#zoom=page-width&pagemode=thumbs`;
+// ✅ 자체 호스팅한 PDF.js 뷰어로 변경
+const viewer = `./pdfjs/web/viewer.html?file=${encodeURIComponent(fileUrl)}#zoom=page-width&pagemode=thumbs`;
 document.getElementById('frame').src = viewer;
 </script>
 </body>
