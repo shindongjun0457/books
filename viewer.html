@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PDF Viewer</title>
+  <style>
+    html,body { margin:0; height:100%; background:#0b0b10; }
+    header { background:#0b0b10; border-bottom:1px solid #222735; color:#eaeaea; padding:10px 16px; display:flex; align-items:center; gap:10px; }
+    a { color:#9ab4ff; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    iframe { width:100%; height:calc(100% - 48px); border:0; display:block; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="index.html">← 목록으로</a>
+  <span id="title"></span>
+  <a id="download" target="_blank" style="margin-left:auto;">다운로드</a>
+</header>
+<iframe id="frame"></iframe>
+
+<script src="config.js"></script>
+<script>
+const { API_KEY } = window.DRIVE_CONFIG;
+const p = new URLSearchParams(location.search);
+const id = p.get('id');
+const name = p.get('name') || 'PDF 문서';
+
+document.getElementById('title').textContent = name;
+const fileUrl = `https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${API_KEY}`;
+document.getElementById('download').href = fileUrl;
+
+const viewer = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(fileUrl)}#zoom=page-width&pagemode=thumbs`;
+document.getElementById('frame').src = viewer;
+</script>
+</body>
+</html>
