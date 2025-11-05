@@ -26,16 +26,15 @@
     #progress > div { height:100%; background:#3b82f6; width:0%; transition:width .2s; }
   </style>
 
-  <!-- PageFlip (flipbook) CDN -->
-  <link rel="stylesheet" href="https://unpkg.com/page-flip/dist/css/page-flip.min.css">
-  <script src="https://unpkg.com/page-flip/dist/js/page-flip.browser.min.js"></script>
+  <!-- PageFlip (local) -->
+<script src="./vendor/pageflip/page-flip.browser.min.js"></script>
 
-  <!-- PDF.js (렌더링용) CDN -->
-  <script src="https://unpkg.com/pdfjs-dist@4/build/pdf.min.js"></script>
-  <script>
-    // PDF.js 워커 설정(CDN 경로)
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@4/build/pdf.worker.min.js";
-  </script>
+<!-- PDF.js (local, ESM) -->
+<script type="module">
+  import * as pdfjsLib from './vendor/pdfjs/pdf.min.mjs';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdfjs/pdf.worker.min.mjs';
+  window.pdfjsLib = pdfjsLib;
+</script>
 </head>
 <body>
   <div class="wrap">
