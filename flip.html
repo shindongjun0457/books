@@ -98,51 +98,69 @@
 
     // ====== PDF 로드 & 렌더링 → 이미지 → Flipbook 페이지로 추가 ======
     (async () => {
-      try {
-        const loadingTask = pdfjsLib.getDocument({ url: fileUrl, withCredentials: false, useSystemFonts: true });
-        const pdf = await loadingTask.promise;
+  try {
+    const pctEl = document.getElementById('pct');
+    const barEl = document.querySelector('#progress > div');
 
-        const total = pdf.numPages;
-        const pctEl = document.getElementById('pct');
-        const barEl = document.querySelector('#progress > div');
+    // 1) 먼저 바이너리로 가져오기 (CORS/Range 우회)
+    const r = await fetch(fileUrl, { mode: "cors" });
+    if (!r.ok) throw new Error("Drive fetch error: " + r.status);
+    const buf = await r.arrayBuffer();
 
-        const pages = [];
-        for (let p = 1; p <= total; p++) {
-          const page = await pdf.getPage(p);
-          // 뷰포트 스케일(화질 조절) — 필요 시 1.5~2.0으로 높이세요
-          const viewport = page.getViewport({ scale: 1.6 });
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d', { willReadFrequently: true });
-          canvas.width  = viewport.width;
-          canvas.height = viewport.height;
+    // 2) data로 열기 (URL 대신)
+    const loadingTask = pdfjsLib.getDocument({
+      data: buf,
+      // 드라이브/프록시 이슈 회피 옵션(안전)
+      disableAutoFetch: true,
+      disableStream: true,
+      isEvalSupported: true,
+      useSystemFonts: true
+    });
+    const pdf = await loadingTask.promise;
 
-          await page.render({ canvasContext: ctx, viewport }).promise;
+    const total = pdf.numPages;
+    const pages = [];
 
-          // 캔버스 → 이미지 dataURL
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-          pages.push(dataUrl);
+    for (let p = 1; p <= total; p++) {
+      const page = await pdf.getPage(p);
 
-          const pct = Math.round((p / total) * 100);
-          pctEl.textContent = pct + '%';
-          barEl.style.width = pct + '%';
-        }
+      // 화질(1.6~2.0 추천)
+      const viewport = page.getViewport({ scale: 1.6 });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      canvas.width  = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
 
-        // Flipbook에 페이지 추가
-        pageFlip.loadFromImages(pages.map(src => {
-          const el = document.createElement('div');
-          el.className = 'page';
-          el.innerHTML = `<img src="${src}" loading="lazy" alt="page">`;
-          return el;
-        }));
+      await page.render({ canvasContext: ctx, viewport }).promise;
 
-        // 로더 숨김
-        document.getElementById('loader').style.display = 'none';
+      // 캔버스 → 이미지
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      pages.push(dataUrl);
 
-      } catch (e) {
-        console.error(e);
-        document.getElementById('loader').innerHTML = '<div style="color:#ff8686">문서를 불러오지 못했습니다. 권한 또는 API 키 설정을 확인하세요.</div>';
-      }
-    })();
+      const pct = Math.round((p / total) * 100);
+      pctEl.textContent = pct + '%';
+      barEl.style.width = pct + '%';
+    }
+
+    // Flipbook 로드
+    pageFlip.loadFromImages(
+      pages.map(src => {
+        const el = document.createElement('div');
+        el.className = 'page';
+        el.innerHTML = `<img src="${src}" loading="lazy" alt="page">`;
+        return el;
+      })
+    );
+
+    // 로더 숨김
+    document.getElementById('loader').style.display = 'none';
+
+  } catch (e) {
+    console.error(e);
+    document.getElementById('loader').innerHTML =
+      '<div style="color:#ff8686">로드 실패: ' + (e?.message || e) + '</div>';
+  }
+})();
   </script>
 </body>
 </html>
