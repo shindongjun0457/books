@@ -100,6 +100,7 @@ function render() {
     const size = formatSize(f.size);
     const time = new Date(f.modifiedTime).toLocaleString();
     const viewUrl = `viewer.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
+    const flipUrl = `./flip.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
     const downloadUrl = `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&key=${API_KEY}`;
     el.grid.innerHTML += `
       <div class="card">
@@ -109,6 +110,7 @@ function render() {
           <div class="sub">${time}</div>
           <div class="row">
             <a class="btn" href="${viewUrl}">열기</a>
+            <a class="btn" href="${flipUrl}">책처럼 보기</a>
             <a class="btn" href="${downloadUrl}" target="_blank">다운로드</a>
             <span class="sub" style="margin-left:auto;">${size}</span>
           </div>
