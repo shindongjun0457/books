@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Flipbook Viewer</title>
+
+  <style>
+    :root { --bg:#0b0b10; --fg:#eaeaea; --muted:#9aa0a6; --ring:#222735; }
+    html,body { height:100%; margin:0; background:var(--bg); color:var(--fg); }
+    header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--ring); }
+    header a { color:#9ab4ff; text-decoration:none; }
+    .bar { margin-left:auto; display:flex; gap:8px; }
+    .btn { background:#192034; border:1px solid var(--ring); color:#eaeaea; padding:8px 10px; border-radius:10px; font-size:12px; text-decoration:none; }
+    .btn:hover { border-color:#3b82f6; }
+    .wrap { height:calc(100% - 48px); display:grid; grid-template-rows:auto 1fr; }
+    #stageWrap { display:grid; place-items:center; height:100%; overflow:auto; }
+    #stage { width: 90vw; max-width: 1200px; height: 70vh; background:#0f1420; border:1px solid var(--ring); border-radius:12px; box-shadow:0 6px 30px rgba(0,0,0,.35); }
+    #hint { color:var(--muted); text-align:center; padding:10px 0 0; font-size:12px; }
+
+    /* PageFlip 기본 스타일 보완 */
+    .page { background:#fff; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+    .page img { width:100%; height:100%; object-fit:contain; display:block; }
+    #loader { text-align:center; color:var(--muted); padding:20px; }
+    #progress { height:6px; background:#111624; border-radius:6px; overflow:hidden; margin:8px auto; width:240px; }
+    #progress > div { height:100%; background:#3b82f6; width:0%; transition:width .2s; }
+  </style>
+
+  <!-- PageFlip (flipbook) CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/page-flip/dist/css/page-flip.min.css">
+  <script src="https://unpkg.com/page-flip/dist/js/page-flip.browser.min.js"></script>
+
+  <!-- PDF.js (렌더링용) CDN -->
+  <script src="https://unpkg.com/pdfjs-dist@4/build/pdf.min.js"></script>
+  <script>
+    // PDF.js 워커 설정(CDN 경로)
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@4/build/pdf.worker.min.js";
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a href="./">← 목록으로</a>
+      <strong id="title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></strong>
+      <div class="bar">
+        <button class="btn" id="prevBtn">이전</button>
+        <button class="btn" id="nextBtn">다음</button>
+        <button class="btn" id="zoomOut">-</button>
+        <button class="btn" id="zoomIn">+</button>
+        <a class="btn" id="download" target="_blank" rel="noopener">다운로드</a>
+      </div>
+    </header>
+
+    <div id="stageWrap">
+      <div id="stage"></div>
+      <div id="hint">좌/우 화살표로 넘겨보세요. 두 페이지 모드, 그림자/두께 효과가 적용된 전자책 UI입니다.</div>
+      <div id="loader">
+        <div>페이지 렌더링 중… <span id="pct">0%</span></div>
+        <div id="progress"><div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./config.js"></script>
+  <script>
+    // ====== 초기 설정 ======
+    const { API_KEY } = window.DRIVE_CONFIG;
+    const qs   = new URLSearchParams(location.search);
+    const id   = qs.get('id');
+    const name = qs.get('name') || 'PDF 문서';
+    document.getElementById('title').textContent = name;
+
+    // Drive 공개 미디어 URL
+    const fileUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&key=${encodeURIComponent(API_KEY)}`;
+    document.getElementById('download').href = fileUrl;
+
+    // ====== Flipbook 초기화 ======
+    const stage = document.getElementById("stage");
+    const pageFlip = new window.St.PageFlip(stage, {
+      width:  600,      // 페이지 단면 기준(px) — 실제 렌더는 자동 맞춤
+      height: 850,
+      size: "stretch",  // 컨테이너에 맞춰 늘림
+      drawShadow: true,
+      flippingTime: 350,
+      usePortrait: false,   // 가로폭이 좁으면 자동 단일 페이지
+      startZIndex: 3,
+      maxShadowOpacity: 0.2,
+      showCover: true,
+      mobileScrollSupport: true
+    });
+
+    // 컨트롤
+    document.getElementById("prevBtn").onclick = () => pageFlip.flipPrev();
+    document.getElementById("nextBtn").onclick = () => pageFlip.flipNext();
+    let zoom = 1;
+    document.getElementById("zoomIn").onclick  = () => { zoom = Math.min(2, zoom + 0.1); stage.style.transform = `scale(${zoom})`; stage.style.transformOrigin = "center top"; };
+    document.getElementById("zoomOut").onclick = () => { zoom = Math.max(0.7, zoom - 0.1); stage.style.transform = `scale(${zoom})`; stage.style.transformOrigin = "center top"; };
+
+    // ====== PDF 로드 & 렌더링 → 이미지 → Flipbook 페이지로 추가 ======
+    (async () => {
+      try {
+        const loadingTask = pdfjsLib.getDocument({ url: fileUrl, withCredentials: false, useSystemFonts: true });
+        const pdf = await loadingTask.promise;
+
+        const total = pdf.numPages;
+        const pctEl = document.getElementById('pct');
+        const barEl = document.querySelector('#progress > div');
+
+        const pages = [];
+        for (let p = 1; p <= total; p++) {
+          const page = await pdf.getPage(p);
+          // 뷰포트 스케일(화질 조절) — 필요 시 1.5~2.0으로 높이세요
+          const viewport = page.getViewport({ scale: 1.6 });
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          canvas.width  = viewport.width;
+          canvas.height = viewport.height;
+
+          await page.render({ canvasContext: ctx, viewport }).promise;
+
+          // 캔버스 → 이미지 dataURL
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          pages.push(dataUrl);
+
+          const pct = Math.round((p / total) * 100);
+          pctEl.textContent = pct + '%';
+          barEl.style.width = pct + '%';
+        }
+
+        // Flipbook에 페이지 추가
+        pageFlip.loadFromImages(pages.map(src => {
+          const el = document.createElement('div');
+          el.className = 'page';
+          el.innerHTML = `<img src="${src}" loading="lazy" alt="page">`;
+          return el;
+        }));
+
+        // 로더 숨김
+        document.getElementById('loader').style.display = 'none';
+
+      } catch (e) {
+        console.error(e);
+        document.getElementById('loader').innerHTML = '<div style="color:#ff8686">문서를 불러오지 못했습니다. 권한 또는 API 키 설정을 확인하세요.</div>';
+      }
+    })();
+  </script>
+</body>
+</html>
