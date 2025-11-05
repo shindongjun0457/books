@@ -100,7 +100,7 @@ function render() {
     const size = formatSize(f.size);
     const time = new Date(f.modifiedTime).toLocaleString();
     const viewUrl = `viewer.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
-    const flipUrl = `./flip.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
+    const flipUrl = `flip.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
     const downloadUrl = `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&key=${API_KEY}`;
     el.grid.innerHTML += `
       <div class="card">
