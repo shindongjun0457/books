@@ -29,11 +29,13 @@ const name = p.get('name') || 'PDF 문서';
 
 document.getElementById('title').textContent = name;
 
-const fileUrl = `https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${API_KEY}`;
+
+// Google Drive media endpoint (공개 파일, API Key 사용)
+const fileUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&key=${encodeURIComponent(API_KEY)}`;
 document.getElementById('download').href = fileUrl;
 
-// ✅ 상대경로("./pdfjs/...") 말고 절대경로로 고정
-const viewer = `/pdfjs/web/viewer.html?file=${encodeURIComponent(fileUrl)}#zoom=page-width&pagemode=thumbs`;
+// ✅ 외부 PDF.js 뷰어(Mozilla)로 로드
+const viewer = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(fileUrl)}#zoom=page-width&pagemode=thumbs`;
 document.getElementById('frame').src = viewer;
 </script>
 </body>
