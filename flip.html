@@ -14,29 +14,33 @@
     :root { --bg:#0b0b10; --fg:#eaeaea; --muted:#9aa0a6; --ring:#222735; }
     html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);}
     header{
-      display:flex;align-items:center;gap:10px;padding:10px 12px;
+      display:flex;align-items:center;gap:8px;padding:8px 10px;
       border-bottom:1px solid var(--ring);background:#0d1018;position:sticky;top:0;z-index:10
     }
     header a{color:#9ab4ff;text-decoration:none}
-    .bar{margin-left:auto;display:flex;gap:8px}
-    .btn{background:#192034;border:1px solid var(--ring);color:#eaeaea;padding:8px 10px;border-radius:10px;font-size:12px}
+    .bar{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+    .btn{background:#192034;border:1px solid var(--ring);color:#eaeaea;
+      padding:7px 10px;border-radius:10px;font-size:12px;cursor:pointer;text-decoration:none}
     .btn:hover{border-color:#3b82f6}
     /* 여백 최소화 */
-    #stageWrap{height:calc(100vh - 52px);display:grid;place-items:center;overflow:auto}
-    /* 컨테이너를 화면 가득 */
+    #stageWrap{height:calc(100vh - 48px);display:grid;place-items:center;overflow:auto;padding:6px}
     #stage{
-      width:96vw;max-width:1400px;height:calc(100vh - 72px);
-      background:#0f1420;border:1px solid var(--ring);border-radius:12px;
+      width:98vw;max-width:1500px;height:calc(100vh - 64px);
+      background:#0f1420;border:1px solid var(--ring);border-radius:10px;
       box-shadow:0 10px 40px rgba(0,0,0,.35)
     }
-    /* Flip 내부 페이지 */
     .page{background:#fff;display:flex;align-items:center;justify-content:center}
     .page img{width:100%;height:100%;object-fit:contain;display:block}
-    /* 로더 */
-    #loader{text-align:center;color:var(--muted);padding:10px 0}
+    #loader{text-align:center;color:var(--muted);padding:6px 0}
     #progress{height:6px;background:#111624;border-radius:6px;overflow:hidden;margin:6px auto;width:240px}
     #progress>div{height:100%;background:#3b82f6;width:0%}
-    #error{color:#ff8686;text-align:center;padding:12px;display:none}
+    #error{color:#ff8686;text-align:center;padding:10px;display:none}
+    /* 이미지 렌더링 힌트(텍스트 선명도 약간 도움) */
+    .page img{
+      image-rendering:-webkit-optimize-contrast;
+      image-rendering:crisp-edges;
+      image-rendering:pixelated; /* 브라우저별 적용 폭 다름 */
+    }
   </style>
 </head>
 <body>
@@ -48,9 +52,11 @@
       <button class="btn" id="nextBtn">다음</button>
       <button class="btn" id="zoomOut">-</button>
       <button class="btn" id="zoomIn">+</button>
-      <a class="btn" id="download" target="_blank" rel="noopener">다운로드</a>
-      <!-- 원본 PDF 보기(기존 뷰어) 옵션 -->
       <a class="btn" id="openOriginal" target="_blank" rel="noopener">원본 보기</a>
+      <a class="btn" id="download" target="_blank" rel="noopener">다운로드</a>
+      <!-- 품질 토글 -->
+      <button class="btn" id="hdBtn" title="고해상도로 다시 그리기">선명도↑ (HD)</button>
+      <button class="btn" id="sdBtn" title="빠른 표시(기본 해상도)">기본(빠름)</button>
     </div>
   </header>
 
@@ -75,119 +81,144 @@
       el.textContent = '로드 실패: ' + msg;
     };
 
-    try {
-      // 1) 파라미터/설정
-      const qs   = new URLSearchParams(location.search);
-      const id   = qs.get('id');
-      const name = qs.get('name') || 'PDF 문서';
-      document.getElementById('title').textContent = name;
+    // === 전역 상태 ===
+    let pdf = null;
+    let pageFlip = null;
+    let pagesCache = []; // 현재 품질로 만든 dataURL 배열
+    let currentQuality = 'sd'; // 'sd' | 'hd'
 
-      if (!id) throw new Error('URL 파라미터 id가 없습니다.');
-      if (!window.DRIVE_CONFIG || !window.DRIVE_CONFIG.API_KEY)
-        throw new Error('config.js의 API_KEY를 찾을 수 없습니다.');
-      const API_KEY = window.DRIVE_CONFIG.API_KEY;
+    // === 유틸 ===
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const stage = document.getElementById('stage');
+    const pctEl = document.getElementById('pct');
+    const barEl = document.querySelector('#progress > div');
 
-      // 파일 URL
-      const fileUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&key=${encodeURIComponent(API_KEY)}`;
-      document.getElementById('download').href = fileUrl;
-      document.getElementById('openOriginal').href =
-        `./viewer.html?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`;
+    const applyZoom = (z) => {
+      stage.style.transform = `scale(${z})`;
+      stage.style.transformOrigin = 'center top';
+    };
 
-      // 2) PDF 가져오기
-      const res = await fetch(fileUrl, { mode: 'cors' });
-      if (!res.ok) throw new Error(`Drive fetch 실패: ${res.status} ${res.statusText}`);
-      const buf = await res.arrayBuffer();
+    // 한 페이지가 펼침 화면의 절반 폭을 차지하도록 base scale 계산 + DPR 반영
+    const stageW = () => stage.clientWidth;
+    const calcScale = (pageViewportWidth, mode='sd') => {
+      const singleTarget = stageW() / 2; // 펼친면(두 페이지) 기준 한 면의 목표 폭
+      const base = singleTarget / pageViewportWidth;
+      const dprCap = mode === 'hd' ? 3.0 : 1.6; // HD는 더 고배율 허용
+      const factor = Math.min(dprCap, dpr * (mode === 'hd' ? 1.6 : 1.0));
+      return Math.max(1.0, base * factor);
+    };
 
-      // 3) PDF 열기
-      const loadingTask = pdfjsLib.getDocument({
-        data: buf,
-        disableAutoFetch: true,
-        disableStream: true,
-        useSystemFonts: true,
-      });
-      const pdf = await loadingTask.promise;
+    // 캔버스 → PNG dataURL (텍스트 선명, 무손실)
+    const canvasToPNG = (canvas) => canvas.toDataURL('image/png');
 
-      // 4) Flipbook 초기화(여백 최소, 뷰포트 가득)
-      const stage = document.getElementById('stage');
-      const pageFlip = new window.St.PageFlip(stage, {
-        size: 'stretch',
-        width:  700,      // 초기 기준값(실제는 stretch + 아래 스케일 계산)
-        height: 1000,
-        drawShadow: true,
-        flippingTime: 350,
-        usePortrait: false,
-        showCover: true,
-        mobileScrollSupport: true,
-        maxShadowOpacity: 0.2,
-        startZIndex: 3
-      });
+    async function renderAllPages(mode='sd'){
+      currentQuality = mode;
+      pagesCache = [];
+      // 로더 ON
+      document.getElementById('loader').style.display = 'block';
+      pctEl.textContent = '0%';
+      barEl.style.width = '0%';
 
-      // 컨트롤
-      document.getElementById('prevBtn').onclick = () => pageFlip.flipPrev();
-      document.getElementById('nextBtn').onclick = () => pageFlip.flipNext();
-      let zoom = 1;
-      const applyZoom = () => {
-        stage.style.transform = `scale(${zoom})`;
-        stage.style.transformOrigin = 'center top';
-      };
-      document.getElementById('zoomIn').onclick  = () => { zoom = Math.min(2.5, zoom + 0.1); applyZoom(); };
-      document.getElementById('zoomOut').onclick = () => { zoom = Math.max(0.7, zoom - 0.1); applyZoom(); };
-
-      // 5) 해상도 계산: 한 페이지가 stage 너비의 절반을 차지하도록, DPR 반영
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-      const stageW = () => stage.clientWidth;  // spread 기준
-      // scale 계산 함수: pdf page viewport(1배) 기준 한 페이지 폭을 컨테이너 절반에 맞춤
-      const calcScale = (pageViewportWidth) => {
-        const singlePageTarget = stageW() / 2;               // 펼친면(두 페이지) 기준
-        const base = singlePageTarget / pageViewportWidth;   // 화면 너비에 맞춤
-        const hiDPI = Math.min(2.0, dpr);                    // 과도한 초고해상도 제한(성능/메모리)
-        return Math.max(1.0, base * hiDPI);                  // 최소 1배
-      };
-
-      // 6) 페이지 렌더
       const total = pdf.numPages;
-      const pctEl = document.getElementById('pct');
-      const barEl = document.querySelector('#progress > div');
-      const pages = [];
-
-      for (let p = 1; p <= total; p++) {
+      for(let p=1;p<=total;p++){
         const page = await pdf.getPage(p);
-
-        // 원본 뷰포트(1배)로 페이지 너비 파악 → stage에 맞춘 스케일 계산
         const vp1 = page.getViewport({ scale: 1 });
-        const scale = calcScale(vp1.width);
-
+        const scale = calcScale(vp1.width, mode);
         const viewport = page.getViewport({ scale });
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        // 캔버스 크기는 실제 픽셀단위(선명하게)
+        // 선명도 보정
+        ctx.imageSmoothingEnabled = false;
+
         canvas.width  = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
-
         await page.render({ canvasContext: ctx, viewport }).promise;
-        pages.push(canvas.toDataURL('image/jpeg', 0.95)); // 고품질 JPEG
+
+        pagesCache.push(canvasToPNG(canvas));
 
         const pct = Math.round((p / total) * 100);
         pctEl.textContent = pct + '%';
         barEl.style.width = pct + '%';
       }
+      // Flipbook 반영
+      if(!pageFlip){
+        pageFlip = new window.St.PageFlip(stage, {
+          size: 'stretch',
+          width: 700, height: 1000,
+          drawShadow: true, flippingTime: 350, usePortrait: false,
+          showCover: true, mobileScrollSupport: true,
+          maxShadowOpacity: 0.2, startZIndex: 3
+        });
+        // 기본 컨트롤
+        document.getElementById('prevBtn').onclick = () => pageFlip.flipPrev();
+        document.getElementById('nextBtn').onclick = () => pageFlip.flipNext();
+        let zoom = 1;
+        document.getElementById('zoomIn').onclick  = () => { zoom = Math.min(2.5, zoom + 0.1); applyZoom(zoom); };
+        document.getElementById('zoomOut').onclick = () => { zoom = Math.max(0.7, zoom - 0.1); applyZoom(zoom); };
+      }else{
+        pageFlip.clear();
+      }
 
-      // 7) Flipbook에 로드 (URL 배열)
-      pageFlip.loadFromImages(pages);
+      pageFlip.loadFromImages(pagesCache);
       pageFlip.on('init', () => {
-        const loader = document.getElementById('loader');
-        if (loader) loader.style.display = 'none';
+        document.getElementById('loader').style.display = 'none';
       });
-
-      // 창 크기 변경 시 scale 재계산(선택사항: 필요시 재렌더)
-      // 여기서는 간단히 stage만 확대/축소(다시 렌더는 비용 큼)
-      window.addEventListener('resize', () => {
-        // 필요하면: 다시 렌더 로직을 호출하여 pages 갱신하도록 확장 가능
-      });
-
-    } catch (e) {
-      showErr(e?.message || String(e));
     }
+
+    (async function main(){
+      try{
+        // 1) 파라미터/설정
+        const qs   = new URLSearchParams(location.search);
+        const id   = qs.get('id');
+        const name = qs.get('name') || 'PDF 문서';
+        document.getElementById('title').textContent = name;
+
+        if (!id) throw new Error('URL 파라미터 id가 없습니다.');
+        if (!window.DRIVE_CONFIG || !window.DRIVE_CONFIG.API_KEY)
+          throw new Error('config.js의 API_KEY를 찾을 수 없습니다.');
+        const API_KEY = window.DRIVE_CONFIG.API_KEY;
+
+        const fileUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&key=${encodeURIComponent(API_KEY)}`;
+        document.getElementById('download').href = fileUrl;
+        document.getElementById('openOriginal').href =
+          `./viewer.html?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`;
+
+        // 2) PDF 가져오기
+        const res = await fetch(fileUrl, { mode: 'cors' });
+        if (!res.ok) throw new Error(`Drive fetch 실패: ${res.status} ${res.statusText}`);
+        const buf = await res.arrayBuffer();
+
+        // 3) PDF 열기
+        const loadingTask = pdfjsLib.getDocument({
+          data: buf,
+          disableAutoFetch: true,
+          disableStream: true,
+          useSystemFonts: true,
+        });
+        pdf = await loadingTask.promise;
+
+        // 4) 먼저 빠르게 SD 렌더 → 버튼으로 HD 재렌더
+        await renderAllPages('sd');
+
+        // 품질 토글 버튼
+        document.getElementById('hdBtn').onclick = async () => {
+          if(currentQuality === 'hd') return;
+          await renderAllPages('hd'); // 고해상도 재렌더
+        };
+        document.getElementById('sdBtn').onclick = async () => {
+          if(currentQuality === 'sd') return;
+          await renderAllPages('sd'); // 기본 해상도로 재렌더
+        };
+
+        // (선택) 창 크기 변경 시 살짝 스케일만 조정
+        window.addEventListener('resize', () => {
+          // 필요하면 여기서 renderAllPages(currentQuality) 호출해 “진짜” 재렌더 가능(비용 큼)
+        });
+
+      }catch(e){
+        showErr(e?.message || String(e));
+      }
+    })();
   </script>
 </body>
 </html>
