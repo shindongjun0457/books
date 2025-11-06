@@ -2,156 +2,158 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Flipbook Viewer</title>
-
-  <!-- 전역 설정: 반드시 가장 먼저 -->
-  <script src="./config.js"></script>
-
-  <!-- PageFlip (UMD: window.St) - 로컬 벤더 -->
-  <script src="./vendor/pageflip/page-flip.browser.js"></script>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>📚 Books Library</title>
   <style>
-    :root { --bg:#0b0b10; --fg:#eaeaea; --muted:#9aa0a6; --ring:#222735; }
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);}
-    header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--ring);}
-    header a{color:#9ab4ff;text-decoration:none}
-    .bar{margin-left:auto;display:flex;gap:8px}
-    .btn{background:#192034;border:1px solid var(--ring);color:#eaeaea;padding:8px 10px;border-radius:10px;font-size:12px;text-decoration:none}
-    .btn:hover{border-color:#3b82f6}
-    .wrap{height:calc(100% - 48px);display:grid;grid-template-rows:auto 1fr}
-    #stageWrap{display:grid;place-items:center;height:100%;overflow:auto;padding:10px}
-    #stage{width:90vw;max-width:1200px;height:72vh;background:#0f1420;border:1px solid var(--ring);border-radius:12px;box-shadow:0 6px 30px rgba(0,0,0,.35)}
-    #hint{color:var(--muted);text-align:center;padding:10px 0 0;font-size:12px}
-    #loader{text-align:center;color:var(--muted);padding:14px 0}
-    #progress{height:6px;background:#111624;border-radius:6px;overflow:hidden;margin:8px auto;width:240px}
-    #progress>div{height:100%;background:#3b82f6;width:0%;transition:width .2s}
-    #error{color:#ff8686;text-align:center;padding:12px;display:none}
+    :root { --bg:#0b0b10; --fg:#eaeaea; --muted:#9aa0a6; --card:#141822; --ring:#222735; }
+    body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Pretendard,Arial; background:var(--bg); color:var(--fg); }
+    header { position:sticky; top:0; backdrop-filter:saturate(120%) blur(8px); background:rgba(11,11,16,.7); border-bottom:1px solid var(--ring); z-index:10; }
+    .wrap { max-width:1180px; margin:0 auto; padding:16px 20px; }
+    h1 { font-size:22px; margin:0 0 12px; display:flex; align-items:center; gap:10px; }
+    .toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    input,select { background:#0f1420; color:var(--fg); border:1px solid var(--ring); padding:10px 12px; border-radius:10px; outline:none; }
+    input:focus,select:focus { border-color:#3b82f6; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px; margin-top:16px; }
+    .card { background:var(--card); border:1px solid var(--ring); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; }
+    .thumb { aspect-ratio: 4/3; background:#0f1420; display:grid; place-items:center; font-size:12px; color:var(--muted); text-decoration:none; }
+    .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+    .meta { padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
+    .name { font-weight:600; font-size:14px; line-height:1.35; word-break:break-all; }
+    .sub { color:var(--muted); font-size:12px; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .btn { background:#192034; border:1px solid var(--ring); color:#eaeaea; padding:8px 10px; border-radius:10px; text-decoration:none; font-size:12px; }
+    .btn:hover { border-color:#3b82f6; }
+    footer { color:var(--muted); font-size:12px; text-align:center; padding:24px 0 40px; }
+    .empty { color:var(--muted); text-align:center; padding:48px 0; }
   </style>
 </head>
 <body>
-  <header>
-    <a href="./">← 목록으로</a>
-    <strong id="title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></strong>
-    <div class="bar">
-      <button class="btn" id="prevBtn">이전</button>
-      <button class="btn" id="nextBtn">다음</button>
-      <button class="btn" id="zoomOut">-</button>
-      <button class="btn" id="zoomIn">+</button>
-      <a class="btn" id="download" target="_blank" rel="noopener">다운로드</a>
-    </div>
-  </header>
-
+<header>
   <div class="wrap">
-    <div id="stageWrap">
-      <div id="stage"></div>
-      <div id="hint">좌/우 화살표로 넘겨보세요. 두 페이지 & 그림자/두께 효과가 적용됩니다.</div>
-      <div id="loader">
-        <div>페이지 렌더링 중… <span id="pct">0%</span></div>
-        <div id="progress"><div></div></div>
-      </div>
-      <div id="error"></div>
+    <h1>📚 Books Library</h1>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="검색: 파일명, 확장자, 크기…" />
+      <select id="sort">
+        <option value="modifiedTime_desc">최신순</option>
+        <option value="modifiedTime_asc">오래된순</option>
+        <option value="name_asc">이름 A→Z</option>
+        <option value="name_desc">이름 Z→A</option>
+        <option value="size_desc">크기 큰순</option>
+        <option value="size_asc">크기 작은순</option>
+      </select>
     </div>
   </div>
+</header>
 
-  <!-- PDF.js v4 (ESM, 로컬 벤더) + 렌더 로직 -->
-  <script type="module">
-    import * as pdfjsLib from './vendor/pdfjs/pdf.min.mjs';
-    pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdfjs/pdf.worker.min.mjs';
+<main class="wrap">
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="empty" style="display:none;">표시할 PDF가 없습니다.</div>
+</main>
 
-    const showErr = (msg) => {
-      console.error(msg);
-      const el = document.getElementById('error');
-      el.style.display = 'block';
-      el.textContent = '로드 실패: ' + msg;
-    };
+<footer>
+  구글 드라이브 폴더의 PDF를 전자책처럼 스트리밍합니다. (books.djcom.kr)
+</footer>
 
-    try {
-      // 1) 파라미터/설정
-      const qs   = new URLSearchParams(location.search);
-      const id   = qs.get('id');
-      const name = qs.get('name') || 'PDF 문서';
-      document.getElementById('title').textContent = name;
+<script src="./config.js"></script>
+<script>
+const { API_KEY, FOLDER_IDS, PAGE_SIZE, USE_THUMBNAIL } = window.DRIVE_CONFIG;
+const DRIVE_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
+const el = {
+  grid: document.getElementById('grid'),
+  empty: document.getElementById('empty'),
+  q: document.getElementById('q'),
+  sort: document.getElementById('sort'),
+};
+let allFiles = [];
 
-      if (!id) throw new Error('URL 파라미터 id가 없습니다.');
-      if (!window.DRIVE_CONFIG || !window.DRIVE_CONFIG.API_KEY)
-        throw new Error('config.js의 API_KEY를 찾을 수 없습니다.');
-      const API_KEY = window.DRIVE_CONFIG.API_KEY;
+init();
 
-      const fileUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&key=${encodeURIComponent(API_KEY)}`;
-      document.getElementById('download').href = fileUrl;
+async function init() {
+  try{
+    const res = await listFolderPdfs(FOLDER_IDS[0]);
+    allFiles = res;
+    render();
+    el.q.addEventListener('input', render);
+    el.sort.addEventListener('change', render);
+  }catch(e){
+    console.error(e);
+    el.grid.innerHTML = '<div class="empty">목록을 불러오지 못했습니다.</div>';
+  }
+}
 
-      // 2) PDF 바이너리 가져오기
-      const res = await fetch(fileUrl, { mode: 'cors' });
-      if (!res.ok) throw new Error(`Drive fetch 실패: ${res.status} ${res.statusText}`);
-      const buf = await res.arrayBuffer();
+function render() {
+  let items = [...allFiles];
+  const q = el.q.value.trim().toLowerCase();
+  if (q) items = items.filter(f => f.name.toLowerCase().includes(q));
 
-      // 3) PDF 열기
-      const loadingTask = pdfjsLib.getDocument({
-        data: buf,
-        disableAutoFetch: true,
-        disableStream: true,
-        useSystemFonts: true,
-      });
-      const pdf = await loadingTask.promise;
-
-      // 4) PageFlip 초기화
-      const stage    = document.getElementById('stage');
-      const pageFlip = new window.St.PageFlip(stage, {
-        width: 600,
-        height: 850,
-        size: 'stretch',
-        drawShadow: true,
-        flippingTime: 350,
-        usePortrait: false,
-        startZIndex: 3,
-        maxShadowOpacity: 0.2,
-        showCover: true,
-        mobileScrollSupport: true
-      });
-
-      // 컨트롤
-      document.getElementById('prevBtn').onclick = () => pageFlip.flipPrev();
-      document.getElementById('nextBtn').onclick = () => pageFlip.flipNext();
-      let zoom = 1;
-      document.getElementById('zoomIn').onclick  = () => { zoom = Math.min(2, zoom + 0.1); stage.style.transform = `scale(${zoom})`; stage.style.transformOrigin = 'center top'; };
-      document.getElementById('zoomOut').onclick = () => { zoom = Math.max(0.7, zoom - 0.1); stage.style.transform = `scale(${zoom})`; stage.style.transformOrigin = 'center top'; };
-
-      // 5) 렌더 진행
-      const total = pdf.numPages;
-      const pctEl = document.getElementById('pct');
-      const barEl = document.querySelector('#progress > div');
-      const pages = [];
-
-      for (let p = 1; p <= total; p++) {
-        const page = await pdf.getPage(p);
-        const viewport = page.getViewport({ scale: 1.6 }); // 화질(1.4~2.0 조절)
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        canvas.width  = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
-        await page.render({ canvasContext: ctx, viewport }).promise;
-
-        // dataURL 문자열만 push (★중요)
-        pages.push(canvas.toDataURL('image/jpeg', 0.92));
-
-        const pct = Math.round((p / total) * 100);
-        pctEl.textContent = pct + '%';
-        barEl.style.width = pct + '%';
-      }
-
-      // 6) Flipbook에 이미지 URL 배열로 로드 (★DOM 아님)
-      pageFlip.loadFromImages(pages);
-
-      // 초기화 시 로더 제거
-      pageFlip.on('init', () => {
-        const loader = document.getElementById('loader');
-        if (loader) loader.style.display = 'none';
-      });
-
-    } catch (e) {
-      showErr(e?.message || String(e));
+  const [key, dir] = el.sort.value.split('_');
+  items.sort((a,b)=>{
+    if (key === 'name') {
+      const r = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      return dir === 'asc' ? r : -r;
     }
-  </script>
+    if (key === 'modifiedTime') {
+      const va = new Date(a.modifiedTime).getTime();
+      const vb = new Date(b.modifiedTime).getTime();
+      return dir === 'asc' ? (va - vb) : (vb - va);
+    }
+    if (key === 'size') {
+      const va = Number(a.size || 0);
+      const vb = Number(b.size || 0);
+      return dir === 'asc' ? (va - vb) : (vb - va);
+    }
+    return 0;
+  });
+
+  el.grid.innerHTML='';
+  if(!items.length){el.empty.style.display='block';return;}
+  el.empty.style.display='none';
+
+  for(const f of items){
+    const thumb = (USE_THUMBNAIL && f.thumbnailLink)
+      ? `<img loading="lazy" src="${f.thumbnailLink}">`
+      : `미리보기 없음`;
+
+    // 링크: 썸네일/열기 → flip.html (책처럼 보기)
+    const flipUrl = `flip.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
+    const originalUrl = `viewer.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
+    const downloadUrl = `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&key=${API_KEY}`;
+
+    const size = formatSize(f.size);
+    const time = new Date(f.modifiedTime).toLocaleString();
+
+    el.grid.innerHTML += `
+      <div class="card">
+        <a class="thumb" href="${flipUrl}" title="책처럼 보기">${thumb}</a>
+        <div class="meta">
+          <div class="name">${f.name}</div>
+          <div class="sub">${time}</div>
+          <div class="row">
+            <a class="btn" href="${flipUrl}">책처럼 보기</a>
+            <a class="btn" href="${originalUrl}">원본 보기</a>
+            <a class="btn" href="${downloadUrl}" target="_blank" rel="noopener">다운로드</a>
+            <span class="sub" style="margin-left:auto;">${size}</span>
+          </div>
+        </div>
+      </div>`;
+  }
+}
+
+function formatSize(n){
+  n=Number(n||0);if(!n)return'-';
+  const u=['B','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++;}
+  return `${n.toFixed(1)} ${u[i]}`;
+}
+
+async function listFolderPdfs(folderId){
+  const q = encodeURIComponent(`'${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
+  const fields = encodeURIComponent('files(id,name,modifiedTime,size,thumbnailLink)');
+  const url = `${DRIVE_ENDPOINT}?key=${API_KEY}&q=${q}&fields=${fields}&pageSize=${PAGE_SIZE}`;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('Drive API 오류: '+r.status);
+  const d = await r.json();
+  return d.files || [];
+}
+</script>
 </body>
 </html>
