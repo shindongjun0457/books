@@ -8,19 +8,19 @@
     :root { --bg:#0b0b10; --fg:#eaeaea; --muted:#9aa0a6; --card:#141822; --ring:#222735; }
     body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Pretendard,Arial; background:var(--bg); color:var(--fg); }
     header { position:sticky; top:0; backdrop-filter:saturate(120%) blur(8px); background:rgba(11,11,16,.7); border-bottom:1px solid var(--ring); z-index:10; }
-    .wrap { max-width:1100px; margin:0 auto; padding:20px; }
-    h1 { font-size:22px; margin:0 0 12px; }
+    .wrap { max-width:1180px; margin:0 auto; padding:16px 20px; }
+    h1 { font-size:22px; margin:0 0 12px; display:flex; align-items:center; gap:10px; }
     .toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
     input,select { background:#0f1420; color:var(--fg); border:1px solid var(--ring); padding:10px 12px; border-radius:10px; outline:none; }
     input:focus,select:focus { border-color:#3b82f6; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; margin-top:18px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px; margin-top:16px; }
     .card { background:var(--card); border:1px solid var(--ring); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; }
-    .thumb { aspect-ratio: 4/3; background:#0f1420; display:grid; place-items:center; font-size:12px; color:var(--muted); }
+    .thumb { aspect-ratio: 4/3; background:#0f1420; display:grid; place-items:center; font-size:12px; color:var(--muted); text-decoration:none; }
     .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
     .meta { padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
     .name { font-weight:600; font-size:14px; line-height:1.35; word-break:break-all; }
     .sub { color:var(--muted); font-size:12px; }
-    .row { display:flex; gap:8px; align-items:center; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .btn { background:#192034; border:1px solid var(--ring); color:#eaeaea; padding:8px 10px; border-radius:10px; text-decoration:none; font-size:12px; }
     .btn:hover { border-color:#3b82f6; }
     footer { color:var(--muted); font-size:12px; text-align:center; padding:24px 0 40px; }
@@ -69,11 +69,16 @@ let allFiles = [];
 init();
 
 async function init() {
-  const res = await listFolderPdfs(FOLDER_IDS[0]);
-  allFiles = res;
-  render();
-  el.q.addEventListener('input', render);
-  el.sort.addEventListener('change', render);
+  try{
+    const res = await listFolderPdfs(FOLDER_IDS[0]);
+    allFiles = res;
+    render();
+    el.q.addEventListener('input', render);
+    el.sort.addEventListener('change', render);
+  }catch(e){
+    console.error(e);
+    el.grid.innerHTML = '<div class="empty">목록을 불러오지 못했습니다.</div>';
+  }
 }
 
 function render() {
@@ -83,11 +88,21 @@ function render() {
 
   const [key, dir] = el.sort.value.split('_');
   items.sort((a,b)=>{
-    let va,vb;
-    if(key==='name'){va=a.name.toLowerCase();vb=b.name.toLowerCase();}
-    else if(key==='modifiedTime'){va=new Date(a.modifiedTime).getTime();vb=new Date(b.modifiedTime).getTime();}
-    else if(key==='size'){va=+a.size||0;vb=+b.size||0;}
-    return dir==='asc'?va-vb:vb-va;
+    if (key === 'name') {
+      const r = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      return dir === 'asc' ? r : -r;
+    }
+    if (key === 'modifiedTime') {
+      const va = new Date(a.modifiedTime).getTime();
+      const vb = new Date(b.modifiedTime).getTime();
+      return dir === 'asc' ? (va - vb) : (vb - va);
+    }
+    if (key === 'size') {
+      const va = Number(a.size || 0);
+      const vb = Number(b.size || 0);
+      return dir === 'asc' ? (va - vb) : (vb - va);
+    }
+    return 0;
   });
 
   el.grid.innerHTML='';
@@ -96,22 +111,27 @@ function render() {
 
   for(const f of items){
     const thumb = (USE_THUMBNAIL && f.thumbnailLink)
-      ? `<img loading="lazy" src="${f.thumbnailLink}">` : `미리보기 없음`;
+      ? `<img loading="lazy" src="${f.thumbnailLink}">`
+      : `미리보기 없음`;
+
+    // 링크: 썸네일/열기 → flip.html (책처럼 보기)
+    const flipUrl = `flip.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
+    const originalUrl = `viewer.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
+    const downloadUrl = `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&key=${API_KEY}`;
+
     const size = formatSize(f.size);
     const time = new Date(f.modifiedTime).toLocaleString();
-    const viewUrl = `viewer.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
-    const flipUrl = `flip.html?id=${f.id}&name=${encodeURIComponent(f.name)}`;
-    const downloadUrl = `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&key=${API_KEY}`;
+
     el.grid.innerHTML += `
       <div class="card">
-        <a class="thumb" href="${viewUrl}">${thumb}</a>
+        <a class="thumb" href="${flipUrl}" title="책처럼 보기">${thumb}</a>
         <div class="meta">
           <div class="name">${f.name}</div>
           <div class="sub">${time}</div>
           <div class="row">
-            <a class="btn" href="${viewUrl}">열기</a>
             <a class="btn" href="${flipUrl}">책처럼 보기</a>
-            <a class="btn" href="${downloadUrl}" target="_blank">다운로드</a>
+            <a class="btn" href="${originalUrl}">원본 보기</a>
+            <a class="btn" href="${downloadUrl}" target="_blank" rel="noopener">다운로드</a>
             <span class="sub" style="margin-left:auto;">${size}</span>
           </div>
         </div>
@@ -129,7 +149,9 @@ async function listFolderPdfs(folderId){
   const q = encodeURIComponent(`'${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
   const fields = encodeURIComponent('files(id,name,modifiedTime,size,thumbnailLink)');
   const url = `${DRIVE_ENDPOINT}?key=${API_KEY}&q=${q}&fields=${fields}&pageSize=${PAGE_SIZE}`;
-  const r = await fetch(url); const d = await r.json();
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('Drive API 오류: '+r.status);
+  const d = await r.json();
   return d.files || [];
 }
 </script>
