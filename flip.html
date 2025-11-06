@@ -5,13 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Flipbook Viewer</title>
 
-  <!-- 1) 전역 설정: 반드시 가장 먼저 로드 -->
+  <!-- 전역 설정: 반드시 가장 먼저 -->
   <script src="./config.js"></script>
 
-  <!-- 2) PageFlip (UMD 전역 window.St) - 로컬 벤더 -->
+  <!-- PageFlip (UMD: window.St) - 로컬 벤더 -->
   <script src="./vendor/pageflip/page-flip.browser.js"></script>
 
-  <!-- 3) 스타일 -->
   <style>
     :root { --bg:#0b0b10; --fg:#eaeaea; --muted:#9aa0a6; --ring:#222735; }
     html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);}
@@ -24,12 +23,10 @@
     #stageWrap{display:grid;place-items:center;height:100%;overflow:auto;padding:10px}
     #stage{width:90vw;max-width:1200px;height:72vh;background:#0f1420;border:1px solid var(--ring);border-radius:12px;box-shadow:0 6px 30px rgba(0,0,0,.35)}
     #hint{color:var(--muted);text-align:center;padding:10px 0 0;font-size:12px}
-    .page{background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center}
-    .page img{width:100%;height:100%;object-fit:contain;display:block}
     #loader{text-align:center;color:var(--muted);padding:14px 0}
     #progress{height:6px;background:#111624;border-radius:6px;overflow:hidden;margin:8px auto;width:240px}
     #progress>div{height:100%;background:#3b82f6;width:0%;transition:width .2s}
-    #error{color:#ff8686;text-align:center;padding:12px}
+    #error{color:#ff8686;text-align:center;padding:12px;display:none}
   </style>
 </head>
 <body>
@@ -48,16 +45,16 @@
   <div class="wrap">
     <div id="stageWrap">
       <div id="stage"></div>
-      <div id="hint">좌/우 화살표로 넘겨보세요. 두 페이지 모드와 그림자/두께 효과가 적용됩니다.</div>
+      <div id="hint">좌/우 화살표로 넘겨보세요. 두 페이지 & 그림자/두께 효과가 적용됩니다.</div>
       <div id="loader">
         <div>페이지 렌더링 중… <span id="pct">0%</span></div>
         <div id="progress"><div></div></div>
       </div>
-      <div id="error" style="display:none"></div>
+      <div id="error"></div>
     </div>
   </div>
 
-  <!-- 4) PDF.js v4 (ESM, 로컬 벤더) + 렌더링 로직을 하나의 모듈에서 처리 -->
+  <!-- PDF.js v4 (ESM, 로컬 벤더) + 렌더 로직 -->
   <script type="module">
     import * as pdfjsLib from './vendor/pdfjs/pdf.min.mjs';
     pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdfjs/pdf.worker.min.mjs';
@@ -70,7 +67,7 @@
     };
 
     try {
-      // --- 파라미터 / 전역 설정 확인 ---
+      // 1) 파라미터/설정
       const qs   = new URLSearchParams(location.search);
       const id   = qs.get('id');
       const name = qs.get('name') || 'PDF 문서';
@@ -79,18 +76,17 @@
       if (!id) throw new Error('URL 파라미터 id가 없습니다.');
       if (!window.DRIVE_CONFIG || !window.DRIVE_CONFIG.API_KEY)
         throw new Error('config.js의 API_KEY를 찾을 수 없습니다.');
-
       const API_KEY = window.DRIVE_CONFIG.API_KEY;
+
       const fileUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&key=${encodeURIComponent(API_KEY)}`;
       document.getElementById('download').href = fileUrl;
 
-      // --- PDF 바이너리 가져오기 (CORS/Range 이슈 우회) ---
-      console.log('🔎 fetching:', fileUrl);
+      // 2) PDF 바이너리 가져오기
       const res = await fetch(fileUrl, { mode: 'cors' });
       if (!res.ok) throw new Error(`Drive fetch 실패: ${res.status} ${res.statusText}`);
       const buf = await res.arrayBuffer();
 
-      // --- PDF 열기 ---
+      // 3) PDF 열기
       const loadingTask = pdfjsLib.getDocument({
         data: buf,
         disableAutoFetch: true,
@@ -99,12 +95,18 @@
       });
       const pdf = await loadingTask.promise;
 
-      // --- Flipbook 초기화 ---
+      // 4) PageFlip 초기화
       const stage    = document.getElementById('stage');
       const pageFlip = new window.St.PageFlip(stage, {
-        width: 600, height: 850, size: 'stretch',
-        drawShadow: true, flippingTime: 350, usePortrait: false,
-        startZIndex: 3, maxShadowOpacity: 0.2, showCover: true,
+        width: 600,
+        height: 850,
+        size: 'stretch',
+        drawShadow: true,
+        flippingTime: 350,
+        usePortrait: false,
+        startZIndex: 3,
+        maxShadowOpacity: 0.2,
+        showCover: true,
         mobileScrollSupport: true
       });
 
@@ -115,7 +117,7 @@
       document.getElementById('zoomIn').onclick  = () => { zoom = Math.min(2, zoom + 0.1); stage.style.transform = `scale(${zoom})`; stage.style.transformOrigin = 'center top'; };
       document.getElementById('zoomOut').onclick = () => { zoom = Math.max(0.7, zoom - 0.1); stage.style.transform = `scale(${zoom})`; stage.style.transformOrigin = 'center top'; };
 
-      // --- 렌더 진행도 ---
+      // 5) 렌더 진행
       const total = pdf.numPages;
       const pctEl = document.getElementById('pct');
       const barEl = document.querySelector('#progress > div');
@@ -123,30 +125,30 @@
 
       for (let p = 1; p <= total; p++) {
         const page = await pdf.getPage(p);
-        const viewport = page.getViewport({ scale: 1.6 }); // 화질(1.6~2.0)
+        const viewport = page.getViewport({ scale: 1.6 }); // 화질(1.4~2.0 조절)
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         canvas.width  = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
         await page.render({ canvasContext: ctx, viewport }).promise;
 
+        // dataURL 문자열만 push (★중요)
         pages.push(canvas.toDataURL('image/jpeg', 0.92));
+
         const pct = Math.round((p / total) * 100);
         pctEl.textContent = pct + '%';
         barEl.style.width = pct + '%';
       }
 
-      // --- Flipbook 로드 ---
-      pageFlip.loadFromImages(
-        pages.map(src => {
-          const el = document.createElement('div');
-          el.className = 'page';
-          el.innerHTML = `<img src="${src}" loading="lazy" alt="page">`;
-          return el;
-        })
-      );
+      // 6) Flipbook에 이미지 URL 배열로 로드 (★DOM 아님)
+      pageFlip.loadFromImages(pages);
 
-      document.getElementById('loader').style.display = 'none';
+      // 초기화 시 로더 제거
+      pageFlip.on('init', () => {
+        const loader = document.getElementById('loader');
+        if (loader) loader.style.display = 'none';
+      });
+
     } catch (e) {
       showErr(e?.message || String(e));
     }
